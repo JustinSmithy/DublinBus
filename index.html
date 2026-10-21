@@ -893,7 +893,10 @@
   }
   .toilet-empty{ color:var(--text-secondary); font-size:14px; text-align:center; padding:20px 0; }
 
-.zone-picker{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.paste-box{ margin:0 0 12px; font-size:14px; }
+  .paste-box summary{ cursor:pointer; color:var(--text-secondary); padding:4px 0; }
+  .paste-box textarea{ width:100%; margin-top:6px; box-sizing:border-box; font-family:var(--font-body); font-size:14px; padding:8px; border:1px solid var(--line); border-radius:3px; background:var(--paper); color:var(--text); }
+  .zone-picker{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
   .zone-chip{ font-family:var(--font-body); font-size:14px; padding:7px 12px; border:1px solid var(--line); border-radius:3px; background:var(--paper); color:var(--text); cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
   .zone-chip .zbox{ width:14px; height:14px; border:1.5px solid var(--text-secondary); border-radius:2px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; line-height:1; }
   .zone-chip.active{ border-color:var(--text); font-weight:600; }
@@ -1709,6 +1712,12 @@
     <h3 id="modalTitle">Add a duty</h3>
     <div class="error-note" id="formError">Please fill in the duty number, date, start and end time.</div>
 
+    <details class="paste-box" id="pasteBox">
+      <summary>Paste duty text message</summary>
+      <textarea id="f-paste" rows="4" placeholder="Paste the text you got (Date : 11/10/2026 / Duty : RZ3/2X …). You can paste several at once."></textarea>
+      <div id="pasteResults" class="zone-picker"></div>
+    </details>
+
     <div class="day-selector" id="daySelectorRow">
       <button type="button" class="day-sel-btn active" data-daysel="Monday–Friday">Mon–Fri</button>
       <button type="button" class="day-sel-btn" data-daysel="Saturday">Saturday</button>
@@ -2410,6 +2419,7 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
     editingId = null;
     document.getElementById('modalTitle').textContent = 'Add a duty';
     document.getElementById('f-dutynum').value = ''; renderZonePicker();
+    (function(){ var t = document.getElementById('f-paste'); if(t) t.value = ''; var r = document.getElementById('pasteResults'); if(r) r.innerHTML = ''; })();
     document.getElementById('f-date').value = todayStr();
     document.getElementById('f-start').value = '';
     document.getElementById('f-end').value = '';
@@ -2979,6 +2989,38 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
     renderZonePicker(); runDutyLookup();
   });
   document.getElementById('f-dutynum').addEventListener('input', function(){ renderZonePicker(); runDutyLookup(); });
+
+  // ---- Paste a duty text message: reads "Date : dd/mm/yyyy" and "Duty : RZ3/2X" ----
+  function parseDutyTexts(text){
+    var out = [], re = /Date\s*:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})[\s\S]*?Duty\s*:\s*([A-Za-z0-9\/]+)/gi, m;
+    while((m = re.exec(text))){
+      var dd = ('0' + m[1]).slice(-2), mm = ('0' + m[2]).slice(-2);
+      out.push({ date: m[3] + '-' + mm + '-' + dd, duty: m[4].toUpperCase() });
+    }
+    return out;
+  }
+  function applyPastedDuty(item){
+    var inp = document.getElementById('f-dutynum'), dt = document.getElementById('f-date');
+    inp.value = item.duty; dt.value = item.date;
+    dt.dispatchEvent(new Event('change'));
+    inp.dispatchEvent(new Event('input'));
+  }
+  (function(){
+    var ta = document.getElementById('f-paste'), res = document.getElementById('pasteResults');
+    if(!ta) return;
+    ta.addEventListener('input', function(){
+      var items = parseDutyTexts(ta.value);
+      res.innerHTML = '';
+      if(!items.length){ if(ta.value.trim()) res.textContent = 'Couldn\'t find a Date and Duty in that text.'; return; }
+      if(items.length === 1){ applyPastedDuty(items[0]); res.textContent = '✓ Filled in ' + items[0].duty + ' on ' + items[0].date.split('-').reverse().join('/'); return; }
+      items.forEach(function(it){
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'zone-chip';
+        b.textContent = it.date.split('-').reverse().slice(0,2).join('/') + ' · ' + it.duty;
+        b.addEventListener('click', function(){ applyPastedDuty(it); });
+        res.appendChild(b);
+      });
+    });
+  })();
   document.getElementById('f-date').addEventListener('change', function(){
     // sync day selector when date changes manually
     var dt = dayTypeFromDate(document.getElementById('f-date').value);
@@ -4452,7 +4494,16 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
   // Offline support + installable app (needs the app to be served over HTTPS, e.g. GitHub Pages)
   try{
     if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
-      navigator.serviceWorker.register('sw.js').catch(function(){});
+      navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }).then(function(reg){
+        // check for a new version every time the app is brought back to the front
+        document.addEventListener('visibilitychange', function(){ if(!document.hidden) reg.update().catch(function(){}); });
+        reg.update().catch(function(){});
+      }).catch(function(){});
+      // when a new version takes over, reload once so you see it straight away
+      var hadController = !!navigator.serviceWorker.controller, reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function(){
+        if(!hadController || reloaded) return; reloaded = true; location.reload();
+      });
     }
   }catch(e){}
 

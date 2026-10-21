@@ -1718,7 +1718,7 @@
     <div class="row2">
       <div class="field">
         <label for="f-dutynum">Duty number</label>
-        <input type="text" id="f-dutynum" placeholder="e.g. RZ3/2X or 2X" inputmode="text" autocomplete="off">
+        <input type="text" id="f-dutynum" placeholder="e.g. RZ3/2X, RD1/15, or Spare" inputmode="text" autocomplete="off">
         <div id="zone-picker" class="zone-picker" role="radiogroup" aria-label="Zone" style="display:none;"></div>
         <div id="duty-lookup-hint" class="duty-hint"></div>
       </div>
@@ -2535,7 +2535,7 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
   // ---- Duty number auto-lookup ----
   function normaliseDutyNum(s){
     s = s.trim().toUpperCase();
-    s = s.replace(/^RZ\d+\//, '').replace(/^RZ/, '');
+    s = s.replace(/^(RZ\d+|RD\d+|R\d+)\//, '').replace(/^RZ/, '');
     s = s.replace(/^0+(\d)/, '$1');
     return s.toLowerCase();
   }
@@ -2586,14 +2586,29 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
     return 'Monday–Friday';
   }
 
+  // Duty-number prefixes: RZ2/ = zone2, R82/ = route82
+  function prefixToKey(raw){
+    var t = String(raw || '').trim().toUpperCase(), m;
+    if((m = t.match(/^RZ(\d+)\//))) return 'zone' + m[1];
+    if(/^RD1\//.test(t)) return 'route82';
+    if((m = t.match(/^R(\d+)\//))) return 'route' + m[1];
+    return null;
+  }
+  function keyToPrefix(key){
+    var m = String(key).match(/^zone(\d+)$/); if(m) return 'RZ' + m[1] + '/';
+    if(key === 'route82') return 'RD1/';
+    m = String(key).match(/^route(\d+)$/); if(m) return 'R' + m[1] + '/';
+    return '';
+  }
+  function isSpareNumber(raw){ return /^((RZ\d+|RD\d+|R\d+)\/)?SPARE\b/i.test(String(raw || '').trim()); }
+
   function findDutyByNumber(raw, dateStr){
     if(!raw || !raw.trim()) return null;
     var stripped = raw.trim();
-    var upper = stripped.toUpperCase().replace(/^RZ\d+\//, '').replace(/^RZ/, '').replace(/^0+(\d)/, '$1');
+    var upper = stripped.toUpperCase().replace(/^(RZ\d+|RD\d+|R\d+)\//, '').replace(/^RZ/, '').replace(/^0+(\d)/, '$1');
     var needle = upper.toLowerCase();
     if(!needle) return null;
-    var pm = stripped.toUpperCase().match(/^RZ(\d+)\//);
-    var prefixZone = pm ? 'zone' + pm[1] : null;
+    var prefixZone = prefixToKey(stripped);
     var matches = [];
     for(var routeKey in ROUTE_DUTY_DATA){
       var days = ROUTE_DUTY_DATA[routeKey].days;
@@ -2629,7 +2644,7 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
 
 
   // ---- Duty trip details (buses, stops, times, hand-overs from the duty sheet) ----
-  function normDetailLabel(x){ return String(x).toUpperCase().replace(/^RZ\d+\//,'').replace(/^0+(\d)/,'$1').trim(); }
+  function normDetailLabel(x){ return String(x).toUpperCase().replace(/^(RZ\d+|RD\d+|R\d+)\//,'').replace(/^0+(\d)/,'$1').trim(); }
   var DETAIL_INDEX = {};
   function buildDetailIndex(){
     DETAIL_INDEX = {};
@@ -2878,7 +2893,10 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
     if(!raw.trim()){ if(dutyLookupHint) dutyLookupHint.textContent=''; return; }
     var found = findDutyByNumber(raw, document.getElementById('f-date').value);
     if(!found){
-      if(dutyLookupHint){ dutyLookupHint.textContent=''; dutyLookupHint.className='duty-hint'; }
+      if(dutyLookupHint){
+        if(isSpareNumber(raw)){ dutyLookupHint.textContent = 'Spare duty — enter your report and finish times, and the route you were put on.'; dutyLookupHint.className = 'duty-hint ok'; }
+        else { dutyLookupHint.textContent=''; dutyLookupHint.className='duty-hint'; }
+      }
       return;
     }
     var d = found.duty;
@@ -2922,32 +2940,42 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
     }
   }
 
-  // ---- Zone tick boxes: ticking a zone writes the RZn/ prefix into the duty number ----
+  // ---- Zone / Route 82 / Spare tick boxes: they write the prefix (RZ2/, R82/) or SPARE into the duty number ----
   function dutyZones(){
     if(typeof ROUTE_META === 'undefined' || !ROUTE_META) return [];
-    return ROUTE_META.filter(function(m){ return m.dataType === 'duty' && ROUTE_DUTY_DATA[m.key] && /^zone\d+$/.test(m.key); });
+    return ROUTE_META.filter(function(m){ return m.dataType === 'duty' && ROUTE_DUTY_DATA[m.key] && keyToPrefix(m.key); });
   }
-  function currentPrefixZone(){
-    var m = document.getElementById('f-dutynum').value.trim().toUpperCase().match(/^RZ(\d+)\//);
-    return m ? 'zone' + m[1] : null;
+  function chipLabel(m){
+    var z = m.key.match(/^zone(\d+)$/); if(z) return 'Zone ' + z[1];
+    var r = m.key.match(/^route(\d+)$/); if(r) return 'Route ' + r[1];
+    return m.name;
   }
   function renderZonePicker(){
     var box = document.getElementById('zone-picker'); if(!box) return;
     var zs = dutyZones();
-    if(zs.length < 2){ box.style.display = 'none'; return; }
-    var cur = currentPrefixZone();
+    if(!zs.length){ box.style.display = 'none'; return; }
+    var raw = document.getElementById('f-dutynum').value;
+    var cur = prefixToKey(raw), spare = isSpareNumber(raw);
     box.style.display = '';
-    box.innerHTML = zs.map(function(m){
-      var n = m.key.replace('zone','');
-      var on = m.key === cur;
-      return '<button type="button" class="zone-chip' + (on ? ' active' : '') + '" role="radio" aria-checked="' + on + '" data-zone="' + m.key + '"><span class="zbox">' + (on ? '✓' : '') + '</span>Zone ' + n + '</button>';
-    }).join('');
+    function chip(attr, val, on, label){
+      return '<button type="button" class="zone-chip' + (on ? ' active' : '') + '" role="checkbox" aria-checked="' + on + '" ' + attr + '="' + val + '"><span class="zbox">' + (on ? '✓' : '') + '</span>' + label + '</button>';
+    }
+    box.innerHTML = zs.map(function(m){ return chip('data-zone', m.key, m.key === cur, chipLabel(m)); }).join('') + chip('data-spare', '1', spare, 'Spare');
   }
   document.getElementById('zone-picker').addEventListener('click', function(e){
     var b = e.target.closest('.zone-chip'); if(!b) return;
     var inp = document.getElementById('f-dutynum');
-    var rest = inp.value.trim().replace(/^RZ\d*\/?/i, '');
-    inp.value = (b.getAttribute('data-zone') === currentPrefixZone()) ? rest : 'RZ' + b.getAttribute('data-zone').replace('zone','') + '/' + rest;
+    var raw = inp.value.trim();
+    var cur = prefixToKey(raw), spare = isSpareNumber(raw);
+    var rest = raw.replace(/^(RZ\d+|RD\d+|R\d+)\//i, '');
+    if(rest.toUpperCase() === 'RZ') rest = '';
+    if(b.hasAttribute('data-spare')){
+      inp.value = spare ? '' : 'Spare';
+    } else {
+      var k = b.getAttribute('data-zone');
+      if(spare) rest = '';
+      inp.value = (k === cur ? '' : keyToPrefix(k)) + rest;
+    }
     renderZonePicker(); runDutyLookup();
   });
   document.getElementById('f-dutynum').addEventListener('input', function(){ renderZonePicker(); runDutyLookup(); });
@@ -3501,7 +3529,7 @@ const ROUTE_META_DATA = [{"key": "zone3", "name": "Zone 3 (27 / 77A / 56A)", "gr
     var meta = ROUTE_META.find(function(r){ return r.key === routeKey; });
     switchView('duties');
     openAdd();
-    document.getElementById('f-dutynum').value = (/^zone\d+$/.test(routeKey) ? 'RZ' + routeKey.replace('zone','') + '/' : '') + d.duty; renderZonePicker();
+    document.getElementById('f-dutynum').value = keyToPrefix(routeKey) + d.duty; renderZonePicker();
     document.getElementById('f-start').value = d.report;
     document.getElementById('f-end').value = d.signOff;
     document.getElementById('f-route').value = (meta ? meta.name : '') + ' · ' + day;

@@ -3912,10 +3912,11 @@ if(GARAGE_PACK){(function(){
     return out.slice(0, 2);
   }
   function loadAlerts(){
-    if(!ALERTS_URL) return;
+    if(!ALERTS_URL){ console.warn('[alerts] ALERTS_URL is empty - paste your Worker address in index.html'); return; }
     fetch(ALERTS_URL).then(function(r){ return r.json(); }).then(function(j){
-      if(j && j.alerts){ liveAlerts = j.alerts; try{ render(); }catch(e){} }
-    }).catch(function(){});
+      if(j && j.error){ console.warn('[alerts] Worker error:', j.error); return; }
+      if(j && j.alerts){ liveAlerts = j.alerts; console.log('[alerts] loaded ' + j.alerts.length + ' alerts, periods field: ' + (j.alerts[0] && j.alerts[0].periods ? 'yes' : 'NO (old worker still deployed)')); try{ render(); }catch(e){} }
+    }).catch(function(e){ console.warn('[alerts] could not load', e); });
   }
   setTimeout(loadAlerts, 0);
   setInterval(loadAlerts, 5 * 60 * 1000);

@@ -2683,6 +2683,14 @@ if(GARAGE_PACK){(function(){
           blockInfoHtml = '<div class="timeline-blockinfo">' + _parts.join('') + '</div>';
         }
       }
+      // Fallback: duty has no trip data (e.g. added by hand) - use the route typed on the duty
+      if(!blockInfoHtml && duty.route){
+        var _seen = [], _fb = [];
+        String(duty.route).split(/[^A-Za-z0-9]+/).filter(Boolean).forEach(function(rt){
+          autoAlertsFor(rt, duty.date).forEach(function(a){ if(_seen.indexOf(a) < 0){ _seen.push(a); _fb.push('<div class="tb-info has auto">ⓘ (Information) ' + escapeHtml(a) + '</div>'); } });
+        });
+        if(_fb.length) blockInfoHtml = '<div class="timeline-blockinfo">' + _fb.join('') + '</div>';
+      }
     }catch(e){ blockBarHtml = ''; blockInfoHtml = ''; routeTxt = duty.route || ''; }
     return '' +
     '<div class="duty-card'+(isPast?' past':'')+(tag==='TODAY'?' today':'')+'">' +

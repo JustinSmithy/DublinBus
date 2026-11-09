@@ -3884,7 +3884,7 @@ if(GARAGE_PACK){(function(){
   });
 
   // ---- Live diversion alerts (from your Cloudflare Worker, which reads the NTA feed) ----
-  var ALERTS_URL = '';   // paste your Worker address here, e.g. 'https://dublinbus-alerts.yourname.workers.dev'
+  var ALERTS_URL = 'https://dublinbus-alerts.lspd-bridge.workers.dev/';   // paste your Worker address here, e.g. 'https://dublinbus-alerts.yourname.workers.dev'
   var liveAlerts = [];
   function autoAlertsFor(route, dateStr){
     if(!route || !liveAlerts.length) return [];

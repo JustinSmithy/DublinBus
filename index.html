@@ -2680,9 +2680,7 @@ if(GARAGE_PACK){(function(){
           _g.forEach(function(seg, i){
             var ft = _tm(seg);
             if(ft) _parts.push('<span class="tb-blk"><b class="' + routeCls(seg.r) + '">' + escapeHtml(seg.r || '') + '</b> ' + escapeHtml(ddTime(ft[0].t)) + '–' + escapeHtml(ddTime(ft[1].t)) + '<span class="tb-path">' + (function(){ var out = []; (seg.s||[]).forEach(function(x){ if(x.t && x.l && out[out.length-1] !== x.l) out.push(x.l); }); return out.map(escapeHtml).join(' → '); })() + '</span>' + (function(){ var h = ''; (seg.s||[]).forEach(function(x){ if(x.k){ h += '<span class="tb-ph">' + (x.k === 'p' ? 'Pick up' : 'Hand over') + (x.d ? (x.k === 'p' ? ' off Duty ' : ' to Duty ') + escapeHtml(x.d) : '') + '</span>'; } }); return h; })() + '</span>');
-            var _note = (duty.blockNotes && duty.blockNotes[i]) || '';
             autoAlertsFor(seg.r, duty.date).forEach(function(a){ if(_shownA.indexOf(a.t) < 0){ _shownA.push(a.t); _parts.push(alertHtml(a)); } });
-            _parts.push('<button type="button" class="tb-info' + (_note ? ' has' : '') + '" data-info-duty="' + escapeAttr(duty.id) + '" data-info-block="' + i + '">ⓘ ' + (_note ? '(Information) ' + escapeHtml(_note) : 'Add information') + '</button>');
             if(i < _g.length-1 && ft) _parts.push('<span class="tb-brk">Break ' + escapeHtml(ft[1].l || '') + '</span>');
           });
           blockInfoHtml = '<div class="timeline-blockinfo">' + _parts.join('') + '</div>';

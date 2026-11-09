@@ -2676,7 +2676,7 @@ if(GARAGE_PACK){(function(){
             var ft = _tm(seg);
             if(ft) _parts.push('<span class="tb-blk"><b class="' + routeCls(seg.r) + '">' + escapeHtml(seg.r || '') + '</b> ' + escapeHtml(ddTime(ft[0].t)) + '–' + escapeHtml(ddTime(ft[1].t)) + '<span class="tb-path">' + (function(){ var out = []; (seg.s||[]).forEach(function(x){ if(x.t && x.l && out[out.length-1] !== x.l) out.push(x.l); }); return out.map(escapeHtml).join(' → '); })() + '</span>' + (function(){ var h = ''; (seg.s||[]).forEach(function(x){ if(x.k){ h += '<span class="tb-ph">' + (x.k === 'p' ? 'Pick up' : 'Hand over') + (x.d ? (x.k === 'p' ? ' off Duty ' : ' to Duty ') + escapeHtml(x.d) : '') + '</span>'; } }); return h; })() + '</span>');
             var _note = (duty.blockNotes && duty.blockNotes[i]) || '';
-            autoAlertsFor(seg.r).forEach(function(a){ _parts.push('<div class="tb-info has auto">\u24d8 (Information) ' + escapeHtml(a) + '</div>'); });
+            autoAlertsFor(seg.r, duty.date).forEach(function(a){ _parts.push('<div class="tb-info has auto">\u24d8 (Information) ' + escapeHtml(a) + '</div>'); });
             _parts.push('<button type="button" class="tb-info' + (_note ? ' has' : '') + '" data-info-duty="' + escapeAttr(duty.id) + '" data-info-block="' + i + '">ⓘ ' + (_note ? '(Information) ' + escapeHtml(_note) : 'Add information') + '</button>');
             if(i < _g.length-1 && ft) _parts.push('<span class="tb-brk">Break ' + escapeHtml(ft[1].l || '') + '</span>');
           });
@@ -3878,11 +3878,29 @@ if(GARAGE_PACK){(function(){
   // ---- Live diversion alerts (from your Cloudflare Worker, which reads the NTA feed) ----
   var ALERTS_URL = '';   // paste your Worker address here, e.g. 'https://dublinbus-alerts.yourname.workers.dev'
   var liveAlerts = [];
-  function autoAlertsFor(route){
+  function autoAlertsFor(route, dateStr){
     if(!route || !liveAlerts.length) return [];
-    var re = new RegExp('(^|[^A-Za-z0-9])' + String(route).replace(/[^A-Za-z0-9]/g,'') + '([^A-Za-z0-9]|$)', 'i');
+    var rt = String(route).replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+    if(!rt) return [];
+    var re = new RegExp('(^|[^A-Za-z0-9])' + rt + '([^A-Za-z0-9]|$)', 'i');
     var out = [];
-    liveAlerts.forEach(function(a){ if(re.test((a.title || '') + ' ' + (a.text || ''))) out.push(a.title || a.text); });
+    liveAlerts.forEach(function(a){
+      // NTA route ids look like "1_130_c_a" - the route name is the 2nd part
+      var byId = (a.routeIds || []).some(function(id){ var p = String(id).split('_'); return p.length > 1 && p[1].toUpperCase() === rt; });
+      var byText = re.test((a.title || '') + ' ' + (a.text || ''));
+      // only show if the alert is active on the duty's date
+      if(dateStr && a.periods && a.periods.length){
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr));
+        if(m){
+          var ds = new Date(+m[1], +m[2]-1, +m[3], 0, 0, 0).getTime()/1000;
+          var de = ds + 86400;
+          var live = a.periods.some(function(p){ var s0 = Number(p.start||0), e0 = Number(p.end||0); return (!s0 || s0 < de) && (!e0 || e0 >= ds); });
+          if(!live) return;
+        }
+      }
+      var label = a.title || a.text;
+      if((byId || byText) && out.indexOf(label) < 0) out.push(label);
+    });
     return out.slice(0, 2);
   }
   function loadAlerts(){

@@ -1,20 +1,31 @@
-// Offline support: always try the network first (so updates show up), fall back to the saved copy when there is no signal.
-const CACHE = 'duty-portal-v1';
-const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE).catch(() => {})).then(() => self.skipWaiting()));
+// Network-first service worker: always tries the live site so updates show up,
+// and falls back to the saved copy only when you're offline.
+const CACHE = 'duty-portal-v' + '2026-11-21-black';
+
+self.addEventListener('install', function(e){ self.skipWaiting(); });
+
+self.addEventListener('activate', function(e){
+  e.waitUntil(
+    caches.keys()
+      .then(function(keys){ return Promise.all(keys.filter(function(k){ return k !== CACHE; }).map(function(k){ return caches.delete(k); })); })
+      .then(function(){ return self.clients.claim(); })
+  );
 });
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
-});
-self.addEventListener('fetch', e => {
+
+self.addEventListener('fetch', function(e){
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  if(req.method !== 'GET' || !/^https?:/.test(req.url)) return;
   e.respondWith(
-    fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+    fetch(req, { cache: 'no-cache' })
+      .then(function(res){
+        if(res && res.ok && new URL(req.url).origin === location.origin){
+          const copy = res.clone();
+          caches.open(CACHE).then(function(c){ c.put(req, copy); });
+        }
+        return res;
+      })
+      .catch(function(){
+        return caches.match(req).then(function(hit){ return hit || caches.match('./') || caches.match('index.html'); });
+      })
   );
 });
